@@ -58,6 +58,8 @@ npm run dev
 2. Select a Trello board, then generate PINs for POs on that board
 3. Staff can preview any customer account on `/login` using the customer ID + `ADMIN_PASSWORD` in the PIN field
 
+**Trello comments:** Staff talk freely on cards — those stay internal. To reply to a customer in the portal, start the comment with `[CUSTOMER]: your message`. Customer portal messages appear as `[Customer]: ...` in Trello.
+
 ## Scripts
 
 | Command | Description |

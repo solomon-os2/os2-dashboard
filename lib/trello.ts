@@ -4,6 +4,10 @@ import {
   stageDisplayName,
   type BoardStageConfig,
 } from "./stages";
+import {
+  formatCustomerPortalComment,
+  parseCommentForPortal,
+} from "./comments";
 import { isOrderCard, orderMatchesPo, parseOrderTitle } from "./parsers";
 
 const API_BASE = "https://api.trello.com/1";
@@ -19,7 +23,11 @@ function trelloCredentials() {
   return { key, token };
 }
 
-async function trelloGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+async function trelloGet<T>(
+  path: string,
+  params: Record<string, string> = {},
+  options: { revalidate?: number } = {}
+): Promise<T> {
   const { key, token } = trelloCredentials();
   const url = new URL(`${API_BASE}${path}`);
   url.searchParams.set("key", key);
@@ -28,7 +36,8 @@ async function trelloGet<T>(path: string, params: Record<string, string> = {}): 
     url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url, { next: { revalidate: 60 } });
+  const revalidate = options.revalidate ?? 60;
+  const res = await fetch(url, { next: { revalidate } });
   if (!res.ok) {
     throw new Error(`Trello ${res.status}: ${await res.text()}`);
   }
@@ -98,6 +107,7 @@ export type OrderDetail = OrderSummary & {
     date: string;
     author: string;
     initials: string;
+    source: "customer" | "team";
   }[];
 };
 
@@ -205,20 +215,36 @@ export async function fetchOrderDetail(
   const summary = toSummary(card, stageConfig);
   if (!summary) return null;
 
-  const actions = await trelloGet<TrelloAction[]>(`/cards/${cardId}/actions`, {
-    filter: "commentCard",
-    limit: "50",
-  });
+  const actions = await trelloGet<TrelloAction[]>(
+    `/cards/${cardId}/actions`,
+    {
+      filter: "commentCard",
+      limit: "50",
+    },
+    { revalidate: 0 }
+  );
 
   const comments = actions
-    .filter((a) => a.data.text && !a.data.text.trimStart().startsWith("[INTERNAL]"))
-    .map((a) => ({
-      id: a.id,
-      text: a.data.text!,
-      date: a.date,
-      author: a.memberCreator?.fullName ?? "Team",
-      initials: a.memberCreator?.initials ?? "OS",
-    }));
+    .map((a) => {
+      if (!a.data.text) return null;
+      const parsed = parseCommentForPortal(a.data.text);
+      if (!parsed) return null;
+      return {
+        id: a.id,
+        text: parsed.body,
+        date: a.date,
+        author:
+          parsed.source === "customer"
+            ? "Customer"
+            : (a.memberCreator?.fullName ?? "OS2 Team"),
+        initials:
+          parsed.source === "customer"
+            ? "CU"
+            : (a.memberCreator?.initials ?? "OS"),
+        source: parsed.source,
+      };
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null);
 
   return {
     ...summary,
@@ -246,7 +272,7 @@ export async function postOrderComment(
   const url = new URL(`${API_BASE}/cards/${cardId}/actions/comments`);
   url.searchParams.set("key", key);
   url.searchParams.set("token", token);
-  url.searchParams.set("text", `[Customer]: ${text}`);
+  url.searchParams.set("text", formatCustomerPortalComment(text));
 
   const res = await fetch(url, { method: "POST" });
   if (!res.ok) {

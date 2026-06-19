@@ -17,16 +17,18 @@ export async function POST(
   }
 
   const { id } = await params;
+  const body = text.trim();
 
   try {
-    await postOrderComment(id, session.matchValue!, session.boardId!, text.trim());
+    await postOrderComment(id, session.matchValue!, session.boardId!, body);
     return NextResponse.json({
       comment: {
         id: Date.now().toString(),
-        text: `[Customer]: ${text.trim()}`,
+        text: body,
         date: new Date().toISOString(),
-        author: session.displayName ?? "You",
-        initials: "YOU",
+        author: "Customer",
+        initials: "CU",
+        source: "customer" as const,
       },
     });
   } catch {

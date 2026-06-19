@@ -35,7 +35,3 @@ export function slugifyCustomer(name: string): string {
     .slice(0, 40)
     .toUpperCase();
 }
-
-export function isInternalComment(text: string): boolean {
-  return text.trimStart().startsWith("[INTERNAL]");
-}

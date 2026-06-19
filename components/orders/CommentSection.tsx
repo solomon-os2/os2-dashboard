@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { GlassButton } from "@/components/ui/GlassButton";
 import { formatDate } from "@/lib/utils";
+import { portalCommentLabel, type PortalCommentSource } from "@/lib/comments";
 
 type Comment = {
   id: string;
@@ -11,6 +12,7 @@ type Comment = {
   date: string;
   author: string;
   initials: string;
+  source: PortalCommentSource;
 };
 
 export function CommentSection({
@@ -70,13 +72,28 @@ export function CommentSection({
               className="rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface-muted)] p-4"
             >
               <div className="mb-2 flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--navy)] text-[0.733rem] font-semibold text-white">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-[0.733rem] font-semibold text-white ${
+                    comment.source === "customer"
+                      ? "bg-[var(--navy)]"
+                      : "bg-[var(--text-secondary)]"
+                  }`}
+                >
                   {comment.initials}
                 </div>
-                <div>
-                  <p className="text-[0.75rem] font-medium text-[var(--text-primary)]">
-                    {comment.author}
-                  </p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[0.75rem] font-medium text-[var(--text-primary)]">
+                      {comment.author}
+                    </p>
+                    <span
+                      className={`badge ${
+                        comment.source === "customer" ? "badge-navy" : "badge-muted"
+                      }`}
+                    >
+                      {portalCommentLabel(comment.source)}
+                    </span>
+                  </div>
                   <p className="text-[0.6875rem] text-[var(--text-muted)]">
                     {formatDate(comment.date)}
                   </p>
