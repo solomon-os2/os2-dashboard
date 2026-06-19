@@ -12,6 +12,7 @@ export type AdminCustomerRow = {
   displayName: string;
   customerId: string | null;
   orderCount: number;
+  orderTitles: string[];
   samplePos: string[];
   allPos: string[];
   hasAccount: boolean;
@@ -210,7 +211,7 @@ export function AdminCustomerTable({
         <Table>
           <TableHead>
             <TableRow>
-              <Th>Customer</Th>
+              <Th>PO</Th>
               <Th>Orders</Th>
               <Th>Portal ID</Th>
               <Th>Status</Th>
@@ -226,11 +227,14 @@ export function AdminCustomerTable({
                 <TableRow key={c.matchValue}>
                   <Td>
                     <p className="font-medium text-[var(--text-primary)]">{c.displayName}</p>
-                    {c.samplePos.length > 0 && (
-                      <p className="mt-0.5 text-[0.6875rem] text-[var(--text-muted)]">
-                        PO# {c.samplePos.join(", ")}
-                        {c.orderCount > c.samplePos.length ? "…" : ""}
-                      </p>
+                    {c.orderTitles.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {c.orderTitles.map((title) => (
+                          <span key={title} className="badge badge-muted">
+                            {title}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </Td>
                   <Td>{c.orderCount}</Td>

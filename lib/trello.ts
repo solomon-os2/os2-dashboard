@@ -1,5 +1,5 @@
 import { getStageForList, getProgressPercent, READY_FOR_SHIPPING_ID } from "./stages";
-import { isOrderCard, customerMatchesTitle, parseOrderTitle } from "./parsers";
+import { isOrderCard, orderMatchesPo, parseOrderTitle } from "./parsers";
 
 const API_BASE = "https://api.trello.com/1";
 
@@ -135,10 +135,10 @@ export async function fetchBoardCards(): Promise<TrelloCard[]> {
   });
 }
 
-export async function fetchCustomerOrders(matchValue: string): Promise<OrderSummary[]> {
+export async function fetchCustomerOrders(poNumber: string): Promise<OrderSummary[]> {
   const cards = await fetchBoardCards();
   return cards
-    .filter((c) => isOrderCard(c.name) && customerMatchesTitle(matchValue, c.name))
+    .filter((c) => isOrderCard(c.name) && orderMatchesPo(poNumber, c.name))
     .map(toSummary)
     .filter((o): o is OrderSummary => o !== null)
     .sort((a, b) => Number(b.poNumber) - Number(a.poNumber));
@@ -146,7 +146,7 @@ export async function fetchCustomerOrders(matchValue: string): Promise<OrderSumm
 
 export async function fetchOrderDetail(
   cardId: string,
-  matchValue: string
+  poNumber: string
 ): Promise<OrderDetail | null> {
   const card = await trelloGet<TrelloCard>(`/cards/${cardId}`, {
     fields: "name,desc,idList,labels,due,start,dateLastActivity,badges,cover",
@@ -154,7 +154,7 @@ export async function fetchOrderDetail(
     attachment_fields: "url,name,date,previews",
   });
 
-  if (!isOrderCard(card.name) || !customerMatchesTitle(matchValue, card.name)) {
+  if (!isOrderCard(card.name) || !orderMatchesPo(poNumber, card.name)) {
     return null;
   }
 
@@ -186,14 +186,14 @@ export async function fetchOrderDetail(
 
 export async function postOrderComment(
   cardId: string,
-  matchValue: string,
+  poNumber: string,
   text: string
 ): Promise<void> {
   const card = await trelloGet<{ name: string }>(`/cards/${cardId}`, {
     fields: "name",
   });
 
-  if (!isOrderCard(card.name) || !customerMatchesTitle(matchValue, card.name)) {
+  if (!isOrderCard(card.name) || !orderMatchesPo(poNumber, card.name)) {
     throw new Error("Order not found");
   }
 
@@ -211,14 +211,14 @@ export async function postOrderComment(
 
 export async function postOrderAttachment(
   cardId: string,
-  matchValue: string,
+  poNumber: string,
   file: File
 ): Promise<void> {
   const card = await trelloGet<{ name: string }>(`/cards/${cardId}`, {
     fields: "name",
   });
 
-  if (!isOrderCard(card.name) || !customerMatchesTitle(matchValue, card.name)) {
+  if (!isOrderCard(card.name) || !orderMatchesPo(poNumber, card.name)) {
     throw new Error("Order not found");
   }
 

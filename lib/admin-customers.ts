@@ -1,7 +1,7 @@
 import { createSupabaseAdmin } from "./supabase";
 import { getBoardId } from "./board";
 import { fetchBoardCards } from "./trello";
-import { parseOrderTitle, slugifyCustomer } from "./parsers";
+import { parseOrderTitle, poDisplayName, portalIdFromPo } from "./parsers";
 import bcrypt from "bcryptjs";
 
 export type AdminCustomer = {
@@ -9,6 +9,7 @@ export type AdminCustomer = {
   displayName: string;
   customerId: string | null;
   orderCount: number;
+  orderTitles: string[];
   samplePos: string[];
   allPos: string[];
   hasAccount: boolean;
@@ -53,25 +54,27 @@ export async function listAdminCustomers(): Promise<AdminCustomer[]> {
     throw new Error(error.message);
   }
 
-  const byMatch = new Map<
+  const byPo = new Map<
     string,
-    { displayName: string; orderCount: number; pos: string[] }
+    { displayName: string; orderCount: number; orderTitles: string[] }
   >();
 
   for (const card of cards) {
     const parsed = parseOrderTitle(card.name);
     if (!parsed) continue;
 
-    const key = parsed.customerText.toLowerCase();
-    const existing = byMatch.get(key);
+    const key = parsed.poNumber;
+    const existing = byPo.get(key);
     if (existing) {
       existing.orderCount += 1;
-      existing.pos.push(parsed.poNumber);
+      if (!existing.orderTitles.includes(parsed.customerText)) {
+        existing.orderTitles.push(parsed.customerText);
+      }
     } else {
-      byMatch.set(key, {
-        displayName: parsed.customerText,
+      byPo.set(key, {
+        displayName: poDisplayName(key),
         orderCount: 1,
-        pos: [parsed.poNumber],
+        orderTitles: [parsed.customerText],
       });
     }
   }
@@ -82,30 +85,32 @@ export async function listAdminCustomers(): Promise<AdminCustomer[]> {
 
   const merged: AdminCustomer[] = [];
 
-  for (const [matchValue, trello] of byMatch) {
-    const db = dbByMatch.get(matchValue);
+  for (const [poNumber, trello] of byPo) {
+    const db = dbByMatch.get(poNumber.toLowerCase());
     merged.push({
-      matchValue,
+      matchValue: poNumber,
       displayName: db?.display_name ?? trello.displayName,
       customerId: db?.customer_id ?? null,
       orderCount: trello.orderCount,
-      samplePos: trello.pos.slice(0, 3),
-      allPos: trello.pos,
+      orderTitles: trello.orderTitles,
+      samplePos: [poNumber],
+      allPos: [poNumber],
       hasAccount: !!db,
       hasPin: !!db?.pin_hash,
       createdAt: db?.created_at ?? null,
     });
-    dbByMatch.delete(matchValue);
+    dbByMatch.delete(poNumber.toLowerCase());
   }
 
   for (const [, db] of dbByMatch) {
     merged.push({
-      matchValue: db.match_value.toLowerCase(),
+      matchValue: db.match_value,
       displayName: db.display_name,
       customerId: db.customer_id,
       orderCount: 0,
-      samplePos: [],
-      allPos: [],
+      orderTitles: [],
+      samplePos: [db.match_value],
+      allPos: [db.match_value],
       hasAccount: true,
       hasPin: !!db.pin_hash,
       createdAt: db.created_at,
@@ -115,61 +120,58 @@ export async function listAdminCustomers(): Promise<AdminCustomer[]> {
   return merged.sort((a, b) => b.orderCount - a.orderCount);
 }
 
-async function uniqueCustomerId(base: string): Promise<string> {
-  const supabase = createSupabaseAdmin();
-  let id = slugifyCustomer(base);
-  if (!id) id = "CUSTOMER";
-
-  for (let i = 0; i < 100; i++) {
-    const candidate = i === 0 ? id : `${id}-${i}`;
-    const { data } = await supabase
-      .from("customers")
-      .select("customer_id")
-      .eq("customer_id", candidate)
-      .maybeSingle();
-    if (!data) return candidate;
-  }
-
-  throw new Error("Could not generate unique customer ID");
-}
-
 export async function generatePinForCustomer(
   matchValue: string
 ): Promise<PinGenerationResult> {
   const supabase = createSupabaseAdmin();
   const boardId = getBoardId();
-  const key = matchValue.toLowerCase();
+  const poNumber = matchValue.trim();
 
   const customers = await listAdminCustomers();
-  const target = customers.find((c) => c.matchValue === key);
+  const target = customers.find((c) => c.matchValue === poNumber);
   if (!target) throw new Error("Customer not found");
 
   const pin = generatePin();
   const pinHash = await bcrypt.hash(pin, 10);
   const now = new Date().toISOString();
+  const displayName = poDisplayName(poNumber);
 
   if (target.hasAccount && target.customerId) {
     const { error } = await supabase
       .from("customers")
-      .update({ pin_hash: pinHash, updated_at: now })
+      .update({
+        pin_hash: pinHash,
+        display_name: displayName,
+        updated_at: now,
+      })
       .eq("customer_id", target.customerId)
       .eq("board_id", boardId);
 
     if (error) throw new Error(error.message);
 
     return {
-      matchValue: key,
+      matchValue: poNumber,
       customerId: target.customerId,
-      displayName: target.displayName,
+      displayName,
       pin,
     };
   }
 
-  const customerId = await uniqueCustomerId(target.displayName);
+  const customerId = portalIdFromPo(poNumber);
+  const { data: existingId } = await supabase
+    .from("customers")
+    .select("customer_id")
+    .eq("customer_id", customerId)
+    .maybeSingle();
+
+  if (existingId) {
+    throw new Error(`Portal ID ${customerId} already exists`);
+  }
+
   const { error } = await supabase.from("customers").insert({
     customer_id: customerId,
-    display_name: target.displayName,
-    match_value: key,
+    display_name: displayName,
+    match_value: poNumber,
     board_id: boardId,
     pin_hash: pinHash,
     updated_at: now,
@@ -177,12 +179,12 @@ export async function generatePinForCustomer(
 
   if (error) throw new Error(error.message);
 
-  return { matchValue: key, customerId, displayName: target.displayName, pin };
+  return { matchValue: poNumber, customerId, displayName, pin };
 }
 
 export async function bulkGeneratePins(): Promise<PinGenerationResult[]> {
   const customers = await listAdminCustomers();
-  const withoutPin = customers.filter((c) => !c.hasPin);
+  const withoutPin = customers.filter((c) => !c.hasPin && c.orderCount > 0);
   const results: PinGenerationResult[] = [];
 
   for (const customer of withoutPin) {

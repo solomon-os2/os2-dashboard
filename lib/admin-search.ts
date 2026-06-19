@@ -2,6 +2,7 @@ export type AdminCustomerSearchRow = {
   displayName: string;
   matchValue: string;
   customerId: string | null;
+  orderTitles?: string[];
   samplePos: string[];
   allPos?: string[];
 };
@@ -34,6 +35,7 @@ export function customerMatchesAdminSearch(
     customer.displayName,
     customer.matchValue,
     customer.customerId ?? "",
+    ...(customer.orderTitles ?? []),
     ...allPos,
     ...allPos.map((po) => `po# ${po}`),
     ...customer.samplePos,

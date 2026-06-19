@@ -13,13 +13,18 @@ export function isOrderCard(name: string): boolean {
   return PO_RE.test(name);
 }
 
-export function customerMatchesTitle(
-  matchValue: string,
-  title: string
-): boolean {
+export function orderMatchesPo(poNumber: string, title: string): boolean {
   const parsed = parseOrderTitle(title);
   if (!parsed) return false;
-  return parsed.customerText.toLowerCase().includes(matchValue.toLowerCase());
+  return parsed.poNumber === poNumber.trim();
+}
+
+export function poDisplayName(poNumber: string): string {
+  return `PO# ${poNumber}`;
+}
+
+export function portalIdFromPo(poNumber: string): string {
+  return slugifyCustomer(`PO ${poNumber.trim()}`);
 }
 
 export function slugifyCustomer(name: string): string {
