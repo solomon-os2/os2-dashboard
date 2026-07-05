@@ -1,6 +1,6 @@
 # OS2 Order Tracker
 
-Customer order tracking portal for OS2 Performance Apparel. Orders sync from Trello; customers log in with a portal ID and PIN.
+Customer order tracking portal for OS2 Performance Apparel. Orders sync from Trello; customers log in with their organisation name and PIN.
 
 ## Stack
 
@@ -55,8 +55,8 @@ npm run dev
 ## Admin workflow
 
 1. Open `/admin` and sign in with `ADMIN_PASSWORD`
-2. Select a Trello board, then generate PINs for POs on that board
-3. Staff can preview any customer account on `/login` using the customer ID + `ADMIN_PASSWORD` in the PIN field
+2. Select a Trello board, then generate PINs for customers on that board
+3. Staff can preview any customer account on `/login` using the customer name + `ADMIN_PASSWORD` in the PIN field
 
 **Trello comments:** Staff talk freely on cards — those stay internal. To reply to a customer in the portal, start with `CUSTOMER · your message` (middle dot). Customer portal messages appear as `Customer · ...` in Trello.
 

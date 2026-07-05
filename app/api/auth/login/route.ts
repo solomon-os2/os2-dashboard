@@ -12,7 +12,7 @@ export async function POST(request: Request) {
 
     const customer = await authenticateCustomer(customerId, pin);
     if (!customer) {
-      return NextResponse.json({ error: "Invalid customer ID or PIN" }, { status: 401 });
+      return NextResponse.json({ error: "Invalid customer name or PIN" }, { status: 401 });
     }
 
     const session = await getSession();

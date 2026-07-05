@@ -17,10 +17,10 @@ export type AdminCustomerRow = {
   allPos: string[];
   hasAccount: boolean;
   hasPin: boolean;
-  createdAt: string | null;
+  missingLabelCount?: number;
 };
 
-type Filter = "all" | "with-pin" | "without-pin" | "no-account";
+type Filter = "all" | "with-pin" | "without-pin" | "no-account" | "missing-label";
 
 type GeneratedPin = {
   matchValue: string;
@@ -39,6 +39,7 @@ export function AdminCustomerTable({
     withPin: number;
     withoutPin: number;
     noAccount: number;
+    missingLabel?: number;
   };
 }) {
   const [customers, setCustomers] = useState(initialCustomers);
@@ -58,6 +59,7 @@ export function AdminCustomerTable({
       if (filter === "with-pin") return c.hasPin;
       if (filter === "without-pin") return !c.hasPin;
       if (filter === "no-account") return !c.hasAccount;
+      if (filter === "missing-label") return c.matchValue === "__missing_label__";
       return true;
     });
   }, [customers, filter, search]);
@@ -140,6 +142,9 @@ export function AdminCustomerTable({
     { id: "with-pin", label: "Has PIN", count: stats.withPin },
     { id: "without-pin", label: "No PIN", count: stats.withoutPin },
     { id: "no-account", label: "No account", count: stats.noAccount },
+    ...(stats.missingLabel
+      ? [{ id: "missing-label" as Filter, label: "Missing label", count: stats.missingLabel }]
+      : []),
   ];
 
   const hasUnsavedPins = Object.keys(generatedPins).length > 0;
@@ -167,12 +172,9 @@ export function AdminCustomerTable({
 
       <GlassCard className="card-padded space-y-3">
         <p className="text-[0.8rem] text-[var(--text-secondary)]">
-          PINs are stored hashed in the database. Customer ID stays visible after account
-          creation — use <strong className="text-[var(--text-primary)]">Copy ID</strong> anytime.
-          PIN is shown once after generate/regenerate — use{" "}
-          <strong className="text-[var(--text-primary)]">Copy</strong> copies the PIN only,
-          before refreshing.
-          Lost customer PIN? Regenerate and send manually (self-serve reset email coming later).
+          PINs are stored hashed in the database. Share the customer name and PIN with
+          clients. The short login code is optional. PIN is shown once after
+          generate/regenerate.
         </p>
         {hasUnsavedPins && (
           <p className="rounded-[var(--radius-lg)] border border-amber-200 bg-amber-50 px-3 py-2 text-[0.8rem] text-amber-900">
@@ -211,9 +213,10 @@ export function AdminCustomerTable({
         <Table>
           <TableHead>
             <TableRow>
-              <Th>PO</Th>
+              <Th>Customer</Th>
               <Th>Orders</Th>
-              <Th>Portal ID</Th>
+              <Th>PO numbers</Th>
+              <Th>Login code</Th>
               <Th>Status</Th>
               <Th align="right">Action</Th>
             </TableRow>
@@ -223,25 +226,46 @@ export function AdminCustomerTable({
               const generated = getGeneratedPin(c);
               const matchKey = c.matchValue.toLowerCase();
               const portalId = c.customerId ?? generated?.customerId ?? null;
+              const isMissingLabel = c.matchValue === "__missing_label__";
               return (
                 <TableRow key={c.matchValue}>
                   <Td>
                     <p className="font-medium text-[var(--text-primary)]">{c.displayName}</p>
-                    {c.orderTitles.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {c.orderTitles.map((title) => (
-                          <span key={title} className="badge badge-muted">
-                            {title}
-                          </span>
-                        ))}
-                      </div>
+                    {!isMissingLabel && c.orderTitles.length > 0 && (
+                      <p className="mt-1 text-[0.6875rem] text-[var(--text-muted)]">
+                        {c.orderTitles.slice(0, 2).join(" · ")}
+                        {c.orderTitles.length > 2 ? " …" : ""}
+                      </p>
+                    )}
+                    {isMissingLabel && (
+                      <p className="mt-1 text-[0.6875rem] text-amber-800">
+                        Add a blue_dark Customer - label on these Trello cards
+                      </p>
                     )}
                   </Td>
                   <Td>{c.orderCount}</Td>
                   <Td>
-                    <code className="text-[0.6875rem] text-[var(--navy)]">
-                      {portalId ?? "—"}
-                    </code>
+                    {c.allPos.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {c.allPos.slice(0, 4).map((po) => (
+                          <span key={po} className="badge badge-muted">
+                            {po}
+                          </span>
+                        ))}
+                        {c.allPos.length > 4 && (
+                          <span className="badge badge-muted">+{c.allPos.length - 4}</span>
+                        )}
+                      </div>
+                    ) : (
+                      "—"
+                    )}
+                  </Td>
+                  <Td>
+                    {portalId ? (
+                      <code className="text-[0.6875rem] text-[var(--navy)]">{portalId}</code>
+                    ) : (
+                      "—"
+                    )}
                     {generated && (
                       <p className="mt-0.5 text-[0.6875rem] font-medium tabular-nums text-[var(--navy)]">
                         PIN {generated.pin}
@@ -252,31 +276,31 @@ export function AdminCustomerTable({
                     <StatusBadge customer={c} />
                   </Td>
                   <Td align="right" className="!whitespace-nowrap">
-                    <div className="inline-flex items-center justify-end gap-2">
-                      <GlassButton
-                        variant="ghost"
-                        loading={loading === c.matchValue}
-                        onClick={() => generateOne(c.matchValue)}
-                      >
-                        {c.hasPin ? "Regenerate" : "Generate PIN"}
-                      </GlassButton>
-                      {portalId ? (
+                    {!isMissingLabel ? (
+                      <div className="inline-flex items-center justify-end gap-2">
                         <GlassButton
                           variant="ghost"
-                          onClick={() => copyText(portalId, matchKey, "id")}
+                          loading={loading === c.matchValue}
+                          onClick={() => generateOne(c.matchValue)}
                         >
-                          {isCopied(matchKey, "id") ? "Copied" : "Copy ID"}
+                          {c.hasPin ? "Regenerate" : "Generate PIN"}
                         </GlassButton>
-                      ) : null}
-                      {generated ? (
                         <GlassButton
-                          variant="primary"
-                          onClick={() => copyText(generated.pin, matchKey, "pin")}
+                          variant="ghost"
+                          onClick={() => copyText(c.displayName, matchKey, "id")}
                         >
-                          {isCopied(matchKey, "pin") ? "Copied" : "Copy"}
+                          {isCopied(matchKey, "id") ? "Copied" : "Copy name"}
                         </GlassButton>
-                      ) : null}
-                    </div>
+                        {generated ? (
+                          <GlassButton
+                            variant="primary"
+                            onClick={() => copyText(generated.pin, matchKey, "pin")}
+                          >
+                            {isCopied(matchKey, "pin") ? "Copied" : "Copy PIN"}
+                          </GlassButton>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </Td>
                 </TableRow>
               );

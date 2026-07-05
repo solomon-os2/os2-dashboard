@@ -23,8 +23,8 @@ export function poDisplayName(poNumber: string): string {
   return `PO# ${poNumber}`;
 }
 
-export function portalIdFromPo(poNumber: string): string {
-  return slugifyCustomer(`PO ${poNumber.trim()}`);
+export function portalIdFromCustomer(name: string): string {
+  return slugifyCustomer(name.trim());
 }
 
 export function slugifyCustomer(name: string): string {

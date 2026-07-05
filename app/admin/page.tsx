@@ -18,10 +18,11 @@ export default async function AdminPage() {
   ]);
 
   const stats = {
-    total: customers.length,
-    withPin: customers.filter((c) => c.hasPin).length,
-    withoutPin: customers.filter((c) => !c.hasPin).length,
-    noAccount: customers.filter((c) => !c.hasAccount).length,
+    total: customers.filter((c) => c.matchValue !== "__missing_label__").length,
+    withPin: customers.filter((c) => c.hasPin && c.matchValue !== "__missing_label__").length,
+    withoutPin: customers.filter((c) => !c.hasPin && c.matchValue !== "__missing_label__").length,
+    noAccount: customers.filter((c) => !c.hasAccount && c.matchValue !== "__missing_label__").length,
+    missingLabel: customers.find((c) => c.matchValue === "__missing_label__")?.orderCount ?? 0,
   };
 
   return (
@@ -29,7 +30,7 @@ export default async function AdminPage() {
       <AppHeader
         eyebrow="OS2 Staff"
         title="Customer accounts"
-        subtitle={`${boardName} · ${stats.total} POs`}
+        subtitle={`${boardName} · ${stats.total} customers`}
         actions={
           <>
             <Link

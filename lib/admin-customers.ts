@@ -1,7 +1,8 @@
 import { createSupabaseAdmin } from "./supabase";
 import { getAdminBoardId } from "./board";
 import { fetchBoardCards } from "./trello";
-import { parseOrderTitle, poDisplayName, portalIdFromPo } from "./parsers";
+import { getCustomerFromLabels } from "./customer-labels";
+import { parseOrderTitle, portalIdFromCustomer } from "./parsers";
 import bcrypt from "bcryptjs";
 
 export type AdminCustomer = {
@@ -15,6 +16,7 @@ export type AdminCustomer = {
   hasAccount: boolean;
   hasPin: boolean;
   createdAt: string | null;
+  missingLabelCount?: number;
 };
 
 export type PinGenerationResult = {
@@ -54,27 +56,38 @@ export async function listAdminCustomers(): Promise<AdminCustomer[]> {
     throw new Error(error.message);
   }
 
-  const byPo = new Map<
+  const byCustomer = new Map<
     string,
-    { displayName: string; orderCount: number; orderTitles: string[] }
+    { displayName: string; orderCount: number; orderTitles: string[]; allPos: string[] }
   >();
+  let missingLabelCount = 0;
 
   for (const card of cards) {
     const parsed = parseOrderTitle(card.name);
     if (!parsed) continue;
 
-    const key = parsed.poNumber;
-    const existing = byPo.get(key);
+    const customerName = getCustomerFromLabels(card.labels ?? []);
+    if (!customerName) {
+      missingLabelCount += 1;
+      continue;
+    }
+
+    const key = customerName.toLowerCase();
+    const existing = byCustomer.get(key);
     if (existing) {
       existing.orderCount += 1;
       if (!existing.orderTitles.includes(parsed.customerText)) {
         existing.orderTitles.push(parsed.customerText);
       }
+      if (!existing.allPos.includes(parsed.poNumber)) {
+        existing.allPos.push(parsed.poNumber);
+      }
     } else {
-      byPo.set(key, {
-        displayName: poDisplayName(key),
+      byCustomer.set(key, {
+        displayName: customerName,
         orderCount: 1,
         orderTitles: [parsed.customerText],
+        allPos: [parsed.poNumber],
       });
     }
   }
@@ -85,21 +98,21 @@ export async function listAdminCustomers(): Promise<AdminCustomer[]> {
 
   const merged: AdminCustomer[] = [];
 
-  for (const [poNumber, trello] of byPo) {
-    const db = dbByMatch.get(poNumber.toLowerCase());
+  for (const [, trello] of byCustomer) {
+    const db = dbByMatch.get(trello.displayName.toLowerCase());
     merged.push({
-      matchValue: poNumber,
+      matchValue: trello.displayName,
       displayName: db?.display_name ?? trello.displayName,
       customerId: db?.customer_id ?? null,
       orderCount: trello.orderCount,
       orderTitles: trello.orderTitles,
-      samplePos: [poNumber],
-      allPos: [poNumber],
+      samplePos: trello.allPos.slice(0, 3),
+      allPos: [...trello.allPos].sort((a, b) => Number(a) - Number(b)),
       hasAccount: !!db,
       hasPin: !!db?.pin_hash,
       createdAt: db?.created_at ?? null,
     });
-    dbByMatch.delete(poNumber.toLowerCase());
+    dbByMatch.delete(trello.displayName.toLowerCase());
   }
 
   for (const [, db] of dbByMatch) {
@@ -109,32 +122,60 @@ export async function listAdminCustomers(): Promise<AdminCustomer[]> {
       customerId: db.customer_id,
       orderCount: 0,
       orderTitles: [],
-      samplePos: [db.match_value],
-      allPos: [db.match_value],
+      samplePos: [],
+      allPos: [],
       hasAccount: true,
       hasPin: !!db.pin_hash,
       createdAt: db.created_at,
     });
   }
 
-  return merged.sort((a, b) => b.orderCount - a.orderCount);
+  if (missingLabelCount > 0) {
+    merged.push({
+      matchValue: "__missing_label__",
+      displayName: `Orders missing customer label (${missingLabelCount})`,
+      customerId: null,
+      orderCount: missingLabelCount,
+      orderTitles: [],
+      samplePos: [],
+      allPos: [],
+      hasAccount: false,
+      hasPin: false,
+      createdAt: null,
+      missingLabelCount,
+    });
+  }
+
+  return merged
+    .filter((c) => c.matchValue !== "__missing_label__" || (c.missingLabelCount ?? 0) > 0)
+    .sort((a, b) => {
+      if (a.matchValue === "__missing_label__") return 1;
+      if (b.matchValue === "__missing_label__") return -1;
+      return b.orderCount - a.orderCount;
+    });
 }
 
 export async function generatePinForCustomer(
   matchValue: string
 ): Promise<PinGenerationResult> {
+  if (matchValue === "__missing_label__") {
+    throw new Error("Cannot generate PIN for orders missing a customer label");
+  }
+
   const supabase = createSupabaseAdmin();
   const boardId = await getAdminBoardId();
-  const poNumber = matchValue.trim();
+  const customerName = matchValue.trim();
 
   const customers = await listAdminCustomers();
-  const target = customers.find((c) => c.matchValue === poNumber);
+  const target = customers.find(
+    (c) => c.matchValue.toLowerCase() === customerName.toLowerCase()
+  );
   if (!target) throw new Error("Customer not found");
 
   const pin = generatePin();
   const pinHash = await bcrypt.hash(pin, 10);
   const now = new Date().toISOString();
-  const displayName = poDisplayName(poNumber);
+  const displayName = target.displayName;
 
   if (target.hasAccount && target.customerId) {
     const { error } = await supabase
@@ -142,6 +183,7 @@ export async function generatePinForCustomer(
       .update({
         pin_hash: pinHash,
         display_name: displayName,
+        match_value: target.matchValue,
         updated_at: now,
       })
       .eq("customer_id", target.customerId)
@@ -150,19 +192,19 @@ export async function generatePinForCustomer(
     if (error) throw new Error(error.message);
 
     return {
-      matchValue: poNumber,
+      matchValue: target.matchValue,
       customerId: target.customerId,
       displayName,
       pin,
     };
   }
 
-  const customerId = portalIdFromPo(poNumber);
+  const customerId = portalIdFromCustomer(displayName);
 
   const { error } = await supabase.from("customers").insert({
     customer_id: customerId,
     display_name: displayName,
-    match_value: poNumber,
+    match_value: target.matchValue,
     board_id: boardId,
     pin_hash: pinHash,
     updated_at: now,
@@ -170,12 +212,14 @@ export async function generatePinForCustomer(
 
   if (error) throw new Error(error.message);
 
-  return { matchValue: poNumber, customerId, displayName, pin };
+  return { matchValue: target.matchValue, customerId, displayName, pin };
 }
 
 export async function bulkGeneratePins(): Promise<PinGenerationResult[]> {
   const customers = await listAdminCustomers();
-  const withoutPin = customers.filter((c) => !c.hasPin && c.orderCount > 0);
+  const withoutPin = customers.filter(
+    (c) => !c.hasPin && c.orderCount > 0 && c.matchValue !== "__missing_label__"
+  );
   const results: PinGenerationResult[] = [];
 
   for (const customer of withoutPin) {

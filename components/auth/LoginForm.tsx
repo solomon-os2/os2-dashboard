@@ -45,16 +45,16 @@ export function LoginForm() {
             Customer portal
           </h1>
           <p className="mt-2 text-[0.867rem] text-[var(--text-secondary)]">
-            Enter your customer ID and PIN
+            Enter your customer name and PIN
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <GlassInput
-            label="Customer ID"
+            label="Customer name"
             value={customerId}
-            onChange={(e) => setCustomerId(e.target.value.toUpperCase())}
-            placeholder="e.g. NELSON-BASKETBALL"
+            onChange={(e) => setCustomerId(e.target.value)}
+            placeholder="e.g. Fairhall School"
             autoComplete="username"
             required
           />

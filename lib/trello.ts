@@ -8,7 +8,8 @@ import {
   formatCustomerPortalComment,
   parseCommentForPortal,
 } from "./comments";
-import { isOrderCard, orderMatchesPo, parseOrderTitle } from "./parsers";
+import { cardHasCustomer, getCustomerFromLabels } from "./customer-labels";
+import { isOrderCard, parseOrderTitle } from "./parsers";
 
 const API_BASE = "https://api.trello.com/1";
 
@@ -172,6 +173,13 @@ function toSummary(card: TrelloCard, stageConfig: BoardStageConfig): OrderSummar
   };
 }
 
+function isCustomerOrderCard(card: TrelloCard, customerName: string): boolean {
+  return (
+    isOrderCard(card.name) &&
+    cardHasCustomer(card.labels ?? [], customerName)
+  );
+}
+
 export async function fetchBoardCards(boardId: string): Promise<TrelloCard[]> {
   return trelloGet<TrelloCard[]>(`/boards/${boardId}/cards`, {
     fields: "name,desc,idList,labels,due,start,dateLastActivity,badges,cover",
@@ -181,7 +189,7 @@ export async function fetchBoardCards(boardId: string): Promise<TrelloCard[]> {
 }
 
 export async function fetchCustomerOrders(
-  poNumber: string,
+  customerName: string,
   boardId: string
 ): Promise<OrderSummary[]> {
   const [cards, stageConfig] = await Promise.all([
@@ -190,7 +198,7 @@ export async function fetchCustomerOrders(
   ]);
 
   return cards
-    .filter((c) => isOrderCard(c.name) && orderMatchesPo(poNumber, c.name))
+    .filter((c) => isCustomerOrderCard(c, customerName))
     .map((c) => toSummary(c, stageConfig))
     .filter((o): o is OrderSummary => o !== null)
     .sort((a, b) => Number(b.poNumber) - Number(a.poNumber));
@@ -198,7 +206,7 @@ export async function fetchCustomerOrders(
 
 export async function fetchOrderDetail(
   cardId: string,
-  poNumber: string,
+  customerName: string,
   boardId: string
 ): Promise<OrderDetail | null> {
   const card = await trelloGet<TrelloCard>(`/cards/${cardId}`, {
@@ -207,7 +215,7 @@ export async function fetchOrderDetail(
     attachment_fields: "url,name,date,previews",
   });
 
-  if (!isOrderCard(card.name) || !orderMatchesPo(poNumber, card.name)) {
+  if (!isCustomerOrderCard(card, customerName)) {
     return null;
   }
 
@@ -254,19 +262,28 @@ export async function fetchOrderDetail(
   };
 }
 
+async function assertCustomerOwnsCard(
+  cardId: string,
+  customerName: string
+): Promise<TrelloCard> {
+  const card = await trelloGet<TrelloCard>(`/cards/${cardId}`, {
+    fields: "name,labels",
+  });
+
+  if (!isCustomerOrderCard(card, customerName)) {
+    throw new Error("Order not found");
+  }
+
+  return card;
+}
+
 export async function postOrderComment(
   cardId: string,
-  poNumber: string,
+  customerName: string,
   boardId: string,
   text: string
 ): Promise<void> {
-  const card = await trelloGet<{ name: string }>(`/cards/${cardId}`, {
-    fields: "name",
-  });
-
-  if (!isOrderCard(card.name) || !orderMatchesPo(poNumber, card.name)) {
-    throw new Error("Order not found");
-  }
+  await assertCustomerOwnsCard(cardId, customerName);
 
   const { key, token } = trelloCredentials();
   const url = new URL(`${API_BASE}/cards/${cardId}/actions/comments`);
@@ -282,17 +299,11 @@ export async function postOrderComment(
 
 export async function postOrderAttachment(
   cardId: string,
-  poNumber: string,
+  customerName: string,
   boardId: string,
   file: File
 ): Promise<void> {
-  const card = await trelloGet<{ name: string }>(`/cards/${cardId}`, {
-    fields: "name",
-  });
-
-  if (!isOrderCard(card.name) || !orderMatchesPo(poNumber, card.name)) {
-    throw new Error("Order not found");
-  }
+  await assertCustomerOwnsCard(cardId, customerName);
 
   const { key, token } = trelloCredentials();
   const url = new URL(`${API_BASE}/cards/${cardId}/attachments`);
@@ -309,4 +320,5 @@ export async function postOrderAttachment(
   }
 }
 
+export { getCustomerFromLabels };
 export { resolveBoardStageConfig, toStageProgressConfig } from "./stages";
