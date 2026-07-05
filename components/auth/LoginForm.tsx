@@ -54,7 +54,7 @@ export function LoginForm() {
             label="Customer name"
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
-            placeholder="e.g. Fairhall School"
+            placeholder="Customer Name"
             autoComplete="username"
             required
           />

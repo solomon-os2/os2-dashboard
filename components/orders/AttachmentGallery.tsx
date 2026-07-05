@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { GlassButton } from "@/components/ui/GlassButton";
 import { formatDate } from "@/lib/utils";
@@ -11,8 +10,104 @@ type Attachment = {
   name: string;
   url: string;
   date: string;
+  mimeType?: string | null;
   previews?: { url: string; width: number; height: number }[];
 };
+
+function attachmentProxyUrl(orderId: string, attachmentId: string) {
+  return `/api/orders/${orderId}/attachments/${attachmentId}`;
+}
+
+function fileKind(name: string, mimeType?: string | null) {
+  const mime = mimeType?.toLowerCase() ?? "";
+  if (mime.startsWith("image/")) return "image";
+  if (mime === "application/pdf") return "pdf";
+  if (mime.includes("spreadsheet") || mime.includes("excel") || /\.xlsx?$/i.test(name)) {
+    return "spreadsheet";
+  }
+  if (mime.startsWith("video/")) return "video";
+  if (/\.(png|jpe?g|gif|webp|svg|bmp|heic)$/i.test(name)) return "image";
+  if (/\.pdf$/i.test(name)) return "pdf";
+  if (/\.xlsx?$/i.test(name)) return "spreadsheet";
+  return "file";
+}
+
+function kindLabel(kind: ReturnType<typeof fileKind>) {
+  switch (kind) {
+    case "image":
+      return "Image";
+    case "pdf":
+      return "PDF";
+    case "spreadsheet":
+      return "Excel";
+    case "video":
+      return "Video";
+    default:
+      return "File";
+  }
+}
+
+function FileTile({
+  name,
+  kind,
+  date,
+  selected,
+  onClick,
+}: {
+  name: string;
+  kind: ReturnType<typeof fileKind>;
+  date: string;
+  selected?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-[var(--radius-lg)] border px-3 py-2.5 text-left transition-all hover:shadow-[var(--shadow-sm)] ${
+        selected
+          ? "border-[var(--navy)] bg-[var(--surface-muted)] ring-2 ring-[var(--navy)]/10"
+          : "border-[var(--border)] bg-white hover:border-[var(--navy-light)]"
+      }`}
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-lg)] bg-[var(--surface-muted)] text-[0.625rem] font-semibold text-[var(--navy)]">
+        {kindLabel(kind)}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[0.75rem] font-medium text-[var(--text-primary)]">
+          {name}
+        </span>
+        <span className="block text-[0.625rem] text-[var(--text-muted)]">
+          {formatDate(date)}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function UploadButton({
+  uploading,
+  onUpload,
+}: {
+  uploading: boolean;
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <label className="block cursor-pointer">
+      <input
+        type="file"
+        className="hidden"
+        accept="image/*,.pdf,.xlsx,.xls"
+        onChange={onUpload}
+      />
+      <span className="inline-flex w-full">
+        <GlassButton variant="ghost" loading={uploading} type="button" className="w-full">
+          Upload file
+        </GlassButton>
+      </span>
+    </label>
+  );
+}
 
 export function AttachmentGallery({
   orderId,
@@ -23,9 +118,18 @@ export function AttachmentGallery({
 }) {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
-  const [selected, setSelected] = useState<string | null>(
-    attachments[0]?.previews?.[0]?.url ?? attachments[0]?.url ?? null
+  const [selectedId, setSelectedId] = useState<string | null>(
+    attachments[0]?.id ?? null
   );
+  const [previewError, setPreviewError] = useState(false);
+
+  const selected = attachments.find((a) => a.id === selectedId) ?? null;
+  const selectedUrl = selected
+    ? attachmentProxyUrl(orderId, selected.id)
+    : null;
+  const selectedKind = selected
+    ? fileKind(selected.name, selected.mimeType)
+    : null;
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -45,54 +149,119 @@ export function AttachmentGallery({
     e.target.value = "";
   }
 
-  return (
-    <div className="space-y-3">
-      {selected && (
-        <div className="relative aspect-video overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface-muted)]">
-          <Image src={selected} alt="Preview" fill className="object-contain" unoptimized />
-        </div>
-      )}
+  function selectAttachment(id: string) {
+    setSelectedId(id);
+    setPreviewError(false);
+  }
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {attachments.map((att) => {
-          const thumb = att.previews?.find((p) => p.width >= 200)?.url ?? att.url;
-          return (
-            <button
-              key={att.id}
-              type="button"
-              onClick={() => setSelected(thumb)}
-              className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-white text-left transition-all hover:border-[var(--navy)] hover:shadow-[var(--shadow-sm)]"
-            >
-              <div className="relative aspect-square">
-                <Image
-                  src={thumb}
-                  alt={att.name}
-                  fill
-                  className="object-cover"
-                  unoptimized
+  if (attachments.length === 0) {
+    return (
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <div className="flex min-h-[320px] items-center justify-center rounded-[var(--radius-xl)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-4 py-10 text-center">
+            <div>
+              <p className="text-[0.867rem] font-medium text-[var(--text-secondary)]">
+                No files yet
+              </p>
+              <p className="mt-1 text-[0.8rem] text-[var(--text-muted)]">
+                Artwork and documents from OS2 will appear here
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3">
+          <UploadButton uploading={uploading} onUpload={handleUpload} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-3 lg:items-stretch">
+      <div className="min-h-[320px] lg:col-span-2">
+        {selected && selectedUrl && selectedKind ? (
+          <div className="flex h-full min-h-[320px] flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-white">
+            <div className="shrink-0 border-b border-[var(--border)] px-4 py-3">
+              <p className="truncate text-[0.867rem] font-medium text-[var(--text-primary)]">
+                {selected.name}
+              </p>
+              <p className="text-[0.75rem] text-[var(--text-muted)]">
+                {formatDate(selected.date)}
+              </p>
+            </div>
+
+            <div className="min-h-0 flex-1 bg-[var(--surface-muted)]">
+              {selectedKind === "image" && !previewError ? (
+                <div className="flex h-full min-h-[260px] items-center justify-center p-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={selectedUrl}
+                    alt={selected.name}
+                    className="max-h-[480px] w-full object-contain"
+                    onError={() => setPreviewError(true)}
+                  />
+                </div>
+              ) : selectedKind === "pdf" ? (
+                <iframe
+                  src={selectedUrl}
+                  title={selected.name}
+                  className="h-full min-h-[360px] w-full"
                 />
-              </div>
-              <div className="p-2">
-                <p className="truncate text-[0.6875rem] text-[var(--text-secondary)]">
-                  {att.name}
-                </p>
-                <p className="text-[0.625rem] text-[var(--text-muted)]">
-                  {formatDate(att.date)}
-                </p>
-              </div>
-            </button>
-          );
-        })}
+              ) : (
+                <div className="flex h-full min-h-[260px] flex-col items-center justify-center gap-3 px-4 py-10 text-center">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-[var(--radius-xl)] bg-white text-[0.8rem] font-semibold text-[var(--navy)]">
+                    {kindLabel(selectedKind)}
+                  </span>
+                  <p className="text-[0.8rem] text-[var(--text-muted)]">
+                    Preview not available for this file type
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-2 border-t border-[var(--border)] px-4 py-3">
+              {(selectedKind === "image" && previewError) ||
+              selectedKind === "spreadsheet" ||
+              selectedKind === "file" ||
+              selectedKind === "video" ? (
+                <a
+                  href={selectedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex"
+                >
+                  <GlassButton variant="ghost" type="button">
+                    Open file
+                  </GlassButton>
+                </a>
+              ) : null}
+              <a href={`${selectedUrl}?download=1`} className="inline-flex">
+                <GlassButton variant="ghost" type="button">
+                  Download
+                </GlassButton>
+              </a>
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      <label className="inline-block cursor-pointer">
-        <input type="file" className="hidden" accept="image/*,.pdf" onChange={handleUpload} />
-        <span className="inline-flex">
-          <GlassButton variant="ghost" loading={uploading} type="button">
-            Upload file
-          </GlassButton>
-        </span>
-      </label>
+      <div className="flex min-h-[320px] flex-col lg:col-span-1">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+          {attachments.map((att) => (
+            <FileTile
+              key={att.id}
+              name={att.name}
+              kind={fileKind(att.name, att.mimeType)}
+              date={att.date}
+              selected={att.id === selectedId}
+              onClick={() => selectAttachment(att.id)}
+            />
+          ))}
+        </div>
+        <div className="mt-3 shrink-0">
+          <UploadButton uploading={uploading} onUpload={handleUpload} />
+        </div>
+      </div>
     </div>
   );
 }

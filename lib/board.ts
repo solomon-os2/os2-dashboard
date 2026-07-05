@@ -6,11 +6,11 @@ export function pickDefaultBoard(boards: TrelloBoardSummary[]): string {
     throw new Error("No Trello boards available for this token");
   }
 
-  const testBoard = boards.find((b) => /test/i.test(b.name));
-  if (testBoard) return testBoard.ref;
-
   const os2Board = boards.find((b) => /os2/i.test(b.name));
   if (os2Board) return os2Board.ref;
+
+  const testBoard = boards.find((b) => /test/i.test(b.name));
+  if (testBoard) return testBoard.ref;
 
   return boards[0].ref;
 }

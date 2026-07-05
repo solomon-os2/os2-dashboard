@@ -24,6 +24,13 @@ function trelloCredentials() {
   return { key, token };
 }
 
+function trelloOAuthHeaders() {
+  const { key, token } = trelloCredentials();
+  return {
+    Authorization: `OAuth oauth_consumer_key="${key}", oauth_token="${token}"`,
+  };
+}
+
 async function trelloGet<T>(
   path: string,
   params: Record<string, string> = {},
@@ -51,6 +58,7 @@ type TrelloAttachment = {
   name: string;
   url: string;
   date: string;
+  mimeType?: string | null;
   previews?: { url: string; width: number; height: number }[];
 };
 type TrelloCard = {
@@ -184,7 +192,7 @@ export async function fetchBoardCards(boardId: string): Promise<TrelloCard[]> {
   return trelloGet<TrelloCard[]>(`/boards/${boardId}/cards`, {
     fields: "name,desc,idList,labels,due,start,dateLastActivity,badges,cover",
     attachments: "true",
-    attachment_fields: "url,name,date,previews",
+    attachment_fields: "url,name,date,previews,mimeType",
   });
 }
 
@@ -212,7 +220,7 @@ export async function fetchOrderDetail(
   const card = await trelloGet<TrelloCard>(`/cards/${cardId}`, {
     fields: "name,desc,idList,labels,due,start,dateLastActivity,badges,cover",
     attachments: "true",
-    attachment_fields: "url,name,date,previews",
+    attachment_fields: "url,name,date,previews,mimeType",
   });
 
   if (!isCustomerOrderCard(card, customerName)) {
@@ -318,6 +326,46 @@ export async function postOrderAttachment(
   if (!res.ok) {
     throw new Error(`Failed to upload: ${await res.text()}`);
   }
+}
+
+export async function fetchAttachmentDownload(
+  cardId: string,
+  attachmentId: string,
+  customerName: string
+): Promise<{ body: ReadableStream<Uint8Array>; name: string; mimeType: string }> {
+  await assertCustomerOwnsCard(cardId, customerName);
+
+  const attachment = await trelloGet<{
+    name: string;
+    mimeType: string | null;
+    url: string;
+  }>(`/cards/${cardId}/attachments/${attachmentId}`, {
+    fields: "name,mimeType,url",
+  });
+
+  if (!attachment.url) {
+    throw new Error("Attachment has no download URL");
+  }
+
+  const res = await fetch(attachment.url, {
+    headers: trelloOAuthHeaders(),
+    redirect: "follow",
+  });
+
+  if (!res.ok || !res.body) {
+    throw new Error(`Failed to download attachment: ${res.status}`);
+  }
+
+  const mimeType =
+    attachment.mimeType ??
+    res.headers.get("content-type")?.split(";")[0]?.trim() ??
+    "application/octet-stream";
+
+  return {
+    body: res.body,
+    name: attachment.name,
+    mimeType,
+  };
 }
 
 export { getCustomerFromLabels };

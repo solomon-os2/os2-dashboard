@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { redirect, notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { fetchOrderDetail, resolveBoardStageConfig, toStageProgressConfig } from "@/lib/trello";
@@ -48,94 +47,51 @@ export default async function OrderDetailPage({
       />
 
       <PageShell className="space-y-5">
-        {order.coverUrl && (
-          <GlassCard className="overflow-hidden shadow-[var(--shadow-md)]">
-            <div className="relative aspect-[21/6] min-h-[160px] bg-[var(--surface-muted)]">
-              <Image
-                src={order.coverUrl}
-                alt={order.title}
-                fill
-                className="object-cover"
-                priority
-                unoptimized
-              />
+        <GlassCard className="card-padded">
+          <h2 className="mb-4 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+            Production progress
+          </h2>
+          <dl className="mb-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
+              <dt className="text-[0.75rem] text-[var(--text-muted)]">Stage</dt>
+              <dd className="mt-1 text-[0.867rem] font-semibold leading-snug text-[var(--text-primary)]">
+                {order.stageName}
+              </dd>
             </div>
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
+              <dt className="text-[0.75rem] text-[var(--text-muted)]">Due</dt>
+              <dd className="mt-1 text-[0.867rem] font-semibold text-[var(--text-primary)]">
+                {formatDate(order.due)}
+              </dd>
+            </div>
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3">
+              <dt className="text-[0.75rem] text-[var(--text-muted)]">Updated</dt>
+              <dd className="mt-1 text-[0.867rem] font-semibold text-[var(--text-primary)]">
+                {formatDate(order.lastActivity)}
+              </dd>
+            </div>
+          </dl>
+          <StageProgress
+            currentListId={order.stageId}
+            stageConfig={stageConfig}
+            progress={order.progress}
+          />
+        </GlassCard>
+
+        <div className="grid gap-5 lg:grid-cols-3 lg:items-stretch">
+          <GlassCard className="card-padded lg:col-span-2">
+            <h2 className="mb-4 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              Attachments
+            </h2>
+            <AttachmentGallery orderId={order.id} attachments={order.attachments} />
           </GlassCard>
-        )}
 
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="space-y-5 lg:col-span-2">
-            <GlassCard className="card-padded">
-              <h2 className="mb-5 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                Production progress
-              </h2>
-              <StageProgress currentListId={order.stageId} stageConfig={stageConfig} />
-            </GlassCard>
-
-            {order.description && (
-              <GlassCard className="card-padded">
-                <h2 className="mb-4 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                  Order details
-                </h2>
-                <div className="whitespace-pre-wrap text-[0.933rem] leading-relaxed text-[var(--text-secondary)]">
-                  {order.description}
-                </div>
-              </GlassCard>
-            )}
-
-            <GlassCard className="card-padded">
-              <h2 className="mb-4 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                Messages
-              </h2>
-              <CommentSection orderId={order.id} initialComments={order.comments} />
-            </GlassCard>
-          </div>
-
-          <div className="space-y-5">
-            <GlassCard className="card-padded">
-              <h2 className="mb-4 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                Summary
-              </h2>
-              <dl className="space-y-3 text-[0.867rem]">
-                <div className="flex justify-between gap-4 border-b border-[var(--border)] pb-2">
-                  <dt className="text-[var(--text-muted)]">Stage</dt>
-                  <dd className="font-medium text-[var(--text-primary)]">{order.stageName}</dd>
-                </div>
-                <div className="flex justify-between gap-4 border-b border-[var(--border)] pb-2">
-                  <dt className="text-[var(--text-muted)]">Due</dt>
-                  <dd className="text-[var(--text-primary)]">{formatDate(order.due)}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-[var(--text-muted)]">Updated</dt>
-                  <dd className="text-[var(--text-primary)]">{formatDate(order.lastActivity)}</dd>
-                </div>
-              </dl>
-            </GlassCard>
-
-            <GlassCard className="card-padded">
-              <h2 className="mb-4 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                Attachments
-              </h2>
-              <AttachmentGallery orderId={order.id} attachments={order.attachments} />
-            </GlassCard>
-
-            {order.labels.length > 0 && (
-              <GlassCard className="card-padded">
-                <h2 className="mb-3 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                  Tags
-                </h2>
-                <div className="flex flex-wrap gap-1.5">
-                  {order.labels
-                    .filter((l) => l.name)
-                    .map((label) => (
-                      <span key={label.id} className="badge badge-muted">
-                        {label.name}
-                      </span>
-                    ))}
-                </div>
-              </GlassCard>
-            )}
-          </div>
+          <GlassCard className="card-padded flex flex-col lg:col-span-1">
+            <h2 className="mb-4 shrink-0 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              Messages
+            </h2>
+            <CommentSection orderId={order.id} initialComments={order.comments} />
+          </GlassCard>
         </div>
       </PageShell>
     </div>

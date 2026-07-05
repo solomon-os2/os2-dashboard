@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GlassButton } from "@/components/ui/GlassButton";
 import { formatDate } from "@/lib/utils";
@@ -26,6 +26,14 @@ export function CommentSection({
   const [comments, setComments] = useState(initialComments);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const chronological = [...comments].reverse();
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [comments.length]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,64 +56,89 @@ export function CommentSection({
   }
 
   return (
-    <div className="space-y-4">
-      <form onSubmit={handleSubmit} className="space-y-2">
+    <div className="flex min-h-[300px] flex-1 flex-col">
+      {chronological.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center rounded-[var(--radius-xl)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-4 py-8 text-center">
+          <p className="text-[0.8rem] text-[var(--text-muted)]">
+            No messages yet. Send a note to the OS2 team below.
+          </p>
+        </div>
+      ) : (
+        <div
+          ref={scrollRef}
+          className="h-[300px] shrink-0 space-y-3 overflow-y-auto pr-1"
+        >
+          {chronological.map((comment) => (
+            <div
+              key={comment.id}
+              className={`flex ${comment.source === "customer" ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`max-w-[92%] rounded-[var(--radius-xl)] border px-4 py-3.5 ${
+                  comment.source === "customer"
+                    ? "border-[var(--navy)]/15 bg-[var(--navy)] text-white"
+                    : "border-[var(--border)] bg-[var(--surface-muted)]"
+                }`}
+              >
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <p
+                    className={`text-[0.75rem] font-semibold ${
+                      comment.source === "customer"
+                        ? "text-white/90"
+                        : "text-[var(--text-primary)]"
+                    }`}
+                  >
+                    {comment.author}
+                  </p>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[0.6875rem] font-medium ${
+                      comment.source === "customer"
+                        ? "bg-white/15 text-white/80"
+                        : "bg-white text-[var(--text-muted)]"
+                    }`}
+                  >
+                    {portalCommentLabel(comment.source)}
+                  </span>
+                </div>
+                <p
+                  className={`whitespace-pre-wrap text-[0.867rem] leading-relaxed ${
+                    comment.source === "customer"
+                      ? "text-white/95"
+                      : "text-[var(--text-secondary)]"
+                  }`}
+                >
+                  {comment.text}
+                </p>
+                <p
+                  className={`mt-2 text-[0.6875rem] ${
+                    comment.source === "customer"
+                      ? "text-white/55"
+                      : "text-[var(--text-muted)]"
+                  }`}
+                >
+                  {formatDate(comment.date)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form
+        onSubmit={handleSubmit}
+        className="mt-4 shrink-0 space-y-2.5 border-t border-[var(--border)] pt-4"
+      >
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Write a message to the OS2 team..."
-          rows={3}
+          rows={2}
           className="input resize-none"
         />
         <GlassButton type="submit" loading={loading} disabled={!text.trim()}>
           Send message
         </GlassButton>
       </form>
-
-      <div className="space-y-2">
-        {comments.length === 0 ? (
-          <p className="text-[0.75rem] text-[var(--text-muted)]">No messages yet.</p>
-        ) : (
-          comments.map((comment) => (
-            <div
-              key={comment.id}
-              className="rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface-muted)] p-4"
-            >
-              <div className="mb-2 flex items-center gap-2">
-                <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full text-[0.733rem] font-semibold text-white ${
-                    comment.source === "customer"
-                      ? "bg-[var(--navy)]"
-                      : "bg-[var(--text-secondary)]"
-                  }`}
-                >
-                  {comment.initials}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[0.75rem] font-medium text-[var(--text-primary)]">
-                      {comment.author}
-                    </p>
-                    <span
-                      className={`badge ${
-                        comment.source === "customer" ? "badge-navy" : "badge-muted"
-                      }`}
-                    >
-                      {portalCommentLabel(comment.source)}
-                    </span>
-                  </div>
-                  <p className="text-[0.6875rem] text-[var(--text-muted)]">
-                    {formatDate(comment.date)}
-                  </p>
-                </div>
-              </div>
-              <p className="whitespace-pre-wrap text-[0.75rem] leading-relaxed text-[var(--text-secondary)]">
-                {comment.text}
-              </p>
-            </div>
-          ))
-        )}
-      </div>
     </div>
   );
 }
