@@ -33,8 +33,6 @@ export async function notifyStaffOfCustomerMessage(
     "",
     "Message:",
     payload.message,
-    "",
-    "Reply in Trello on the order card with: CUSTOMER · your message",
   ].join("\n");
 
   const res = await fetch("https://api.resend.com/emails", {
