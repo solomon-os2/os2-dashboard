@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { postOrderComment } from "@/lib/trello";
+import { createPortalMessage } from "@/lib/portal-messages";
 
 export async function POST(
   request: Request,
@@ -20,18 +20,17 @@ export async function POST(
   const body = text.trim();
 
   try {
-    await postOrderComment(id, session.matchValue!, session.boardId!, body);
-    return NextResponse.json({
-      comment: {
-        id: Date.now().toString(),
-        text: body,
-        date: new Date().toISOString(),
-        author: "Customer",
-        initials: "CU",
-        source: "customer" as const,
-      },
+    const comment = await createPortalMessage({
+      cardId: id,
+      boardId: session.boardId!,
+      customerName: session.matchValue!,
+      displayName: session.displayName ?? session.matchValue!,
+      body,
     });
-  } catch {
-    return NextResponse.json({ error: "Failed to post comment" }, { status: 500 });
+
+    return NextResponse.json({ comment });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to post message";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

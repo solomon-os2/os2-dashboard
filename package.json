@@ -9,6 +9,7 @@
     "lint": "next lint",
     "verify-auth": "node scripts/verify-auth.mjs",
     "verify-supabase": "node scripts/verify-supabase.mjs",
+    "test-email": "node scripts/test-email.mjs",
     "db:setup": "node scripts/db-setup.mjs"
   },
   "dependencies": {

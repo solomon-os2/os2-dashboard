@@ -1,15 +1,14 @@
+import "server-only";
+
 import {
   resolveBoardStageConfig,
   getProgressPercent,
   stageDisplayName,
   type BoardStageConfig,
 } from "./stages";
-import {
-  formatCustomerPortalComment,
-  parseCommentForPortal,
-} from "./comments";
 import { cardHasCustomer, getCustomerFromLabels } from "./customer-labels";
 import { isOrderCard, parseOrderTitle } from "./parsers";
+import { fetchOrderComments } from "./order-comments";
 
 const API_BASE = "https://api.trello.com/1";
 
@@ -231,36 +230,7 @@ export async function fetchOrderDetail(
   const summary = toSummary(card, stageConfig);
   if (!summary) return null;
 
-  const actions = await trelloGet<TrelloAction[]>(
-    `/cards/${cardId}/actions`,
-    {
-      filter: "commentCard",
-      limit: "50",
-    },
-    { revalidate: 0 }
-  );
-
-  const comments = actions
-    .map((a) => {
-      if (!a.data.text) return null;
-      const parsed = parseCommentForPortal(a.data.text);
-      if (!parsed) return null;
-      return {
-        id: a.id,
-        text: parsed.body,
-        date: a.date,
-        author:
-          parsed.source === "customer"
-            ? "Customer"
-            : (a.memberCreator?.fullName ?? "OS2 Team"),
-        initials:
-          parsed.source === "customer"
-            ? "CU"
-            : (a.memberCreator?.initials ?? "OS"),
-        source: parsed.source,
-      };
-    })
-    .filter((c): c is NonNullable<typeof c> => c !== null);
+  const comments = await fetchOrderComments(cardId, customerName);
 
   return {
     ...summary,
@@ -270,7 +240,7 @@ export async function fetchOrderDetail(
   };
 }
 
-async function assertCustomerOwnsCard(
+export async function assertCustomerOwnsCard(
   cardId: string,
   customerName: string
 ): Promise<TrelloCard> {
@@ -285,24 +255,24 @@ async function assertCustomerOwnsCard(
   return card;
 }
 
-export async function postOrderComment(
-  cardId: string,
-  customerName: string,
-  boardId: string,
-  text: string
-): Promise<void> {
-  await assertCustomerOwnsCard(cardId, customerName);
-
-  const { key, token } = trelloCredentials();
-  const url = new URL(`${API_BASE}/cards/${cardId}/actions/comments`);
-  url.searchParams.set("key", key);
-  url.searchParams.set("token", token);
-  url.searchParams.set("text", formatCustomerPortalComment(text));
-
-  const res = await fetch(url, { method: "POST" });
-  if (!res.ok) {
-    throw new Error(`Failed to post comment: ${await res.text()}`);
+export async function trelloGetCardSummary(
+  cardId: string
+): Promise<{ name: string } | null> {
+  try {
+    return await trelloGet<{ name: string }>(`/cards/${cardId}`, {
+      fields: "name",
+    });
+  } catch {
+    return null;
   }
+}
+
+export async function fetchTrelloCommentActions(cardId: string) {
+  return trelloGet<TrelloAction[]>(
+    `/cards/${cardId}/actions`,
+    { filter: "commentCard", limit: "50" },
+    { revalidate: 0 }
+  );
 }
 
 export async function postOrderAttachment(

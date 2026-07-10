@@ -1,7 +1,7 @@
 "use client";
 
-import { getStageIndex } from "@/lib/stages";
-import type { StageProgressConfig } from "@/lib/stages";
+import { getStageIndex } from "@/lib/stage-progress-shared";
+import type { StageProgressConfig } from "@/lib/stage-progress-shared";
 import { cn } from "@/lib/utils";
 
 export function StageProgress({
