@@ -28,7 +28,9 @@ export function CommentSection({
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const chronological = [...comments].reverse();
+  useEffect(() => {
+    setComments(initialComments);
+  }, [initialComments]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -48,7 +50,7 @@ export function CommentSection({
 
     if (res.ok) {
       const data = await res.json();
-      setComments((prev) => [data.comment, ...prev]);
+      setComments((prev) => [...prev, data.comment]);
       setText("");
       router.refresh();
     }
@@ -57,7 +59,7 @@ export function CommentSection({
 
   return (
     <div className="flex min-h-[300px] flex-1 flex-col">
-      {chronological.length === 0 ? (
+      {comments.length === 0 ? (
         <div className="flex flex-1 items-center justify-center rounded-[var(--radius-xl)] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-4 py-8 text-center">
           <p className="text-[0.8rem] text-[var(--text-muted)]">
             No messages yet. Send a note to the OS2 team below.
@@ -68,7 +70,7 @@ export function CommentSection({
           ref={scrollRef}
           className="h-[300px] shrink-0 space-y-3 overflow-y-auto pr-1"
         >
-          {chronological.map((comment) => (
+          {comments.map((comment) => (
             <div
               key={comment.id}
               className={`flex ${comment.source === "customer" ? "justify-end" : "justify-start"}`}
