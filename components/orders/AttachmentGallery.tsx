@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GlassButton } from "@/components/ui/GlassButton";
 import { formatDate } from "@/lib/utils";
@@ -92,20 +92,27 @@ function UploadButton({
   uploading: boolean;
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
-    <label className="block cursor-pointer">
+    <>
       <input
+        ref={inputRef}
         type="file"
         className="hidden"
         accept="image/*,.pdf,.xlsx,.xls"
         onChange={onUpload}
       />
-      <span className="inline-flex w-full">
-        <GlassButton variant="ghost" loading={uploading} type="button" className="w-full">
-          Upload file
-        </GlassButton>
-      </span>
-    </label>
+      <GlassButton
+        variant="ghost"
+        loading={uploading}
+        type="button"
+        className="w-full"
+        onClick={() => inputRef.current?.click()}
+      >
+        Upload file
+      </GlassButton>
+    </>
   );
 }
 
